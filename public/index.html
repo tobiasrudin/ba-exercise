@@ -96,50 +96,55 @@ function startDrag(e){
 }
 
 // ---------------- Add images ----------------
-addImageInput.addEventListener('change', e =>{
+addImageInput.addEventListener('change', e => {
   const files = [...e.target.files];
-  if(files.length === 0) return;
+  if (files.length === 0) return;
 
-  const cols = Math.ceil(Math.sqrt(files.length));
-  const gap = 20;
-  const cellW = 200;
-  const cellH = 200;
-  const imgs = [];
-
-  files.forEach((file,i)=>{
+  // Map each file to a promise that resolves when FileReader finishes
+  const promises = files.map((file, i) => new Promise(resolve => {
     const reader = new FileReader();
-    reader.onload = ()=>{
+    reader.onload = () => {
       const id = 'img_' + Math.random().toString(36).slice(2);
+      const cols = Math.ceil(Math.sqrt(files.length));
+      const gap = 20;
+      const cellW = 200;
+      const cellH = 200;
       const r = Math.floor(i / cols);
       const c = i % cols;
-      const left = c*(cellW+gap)+20;
-      const top = r*(cellH+gap)+20;
+      const left = c * (cellW + gap) + 20;
+      const top = r * (cellH + gap) + 20;
 
-      const data = { id, src: reader.result, left, top, width:200, locked:false };
-      imgs.push(data);
+      const data = { id, src: reader.result, left, top, width: 200, locked: false };
 
-      createImageElement(data);
+      createImageElement(data); // create locally for the sender
 
-      if(imgs.length === files.length){
-        socket.emit('add_images', imgs);
-      }
+      resolve(data); // resolve the promise with the image data
     };
     reader.readAsDataURL(file);
+  }));
+
+  // Wait until all files are read
+  Promise.all(promises).then(imgs => {
+    socket.emit('add_images', imgs); // emit to server once all images are ready
   });
 });
 
+
 // ---------------- Background ----------------
-bgInput.addEventListener('change', e =>{
+bgInput.addEventListener('change', e => {
   const file = e.target.files[0];
   if(!file) return;
-  const reader = new FileReader();
-  reader.onload = ()=>{
-    const dataUrl = reader.result;
-    stage.style.backgroundImage = `url(${dataUrl})`;
-    socket.emit('set_background', dataUrl);
-  };
-  reader.readAsDataURL(file);
+
+  new Promise(resolve => {
+    const reader = new FileReader();
+    reader.onload = () => resolve(reader.result); // wait for full data
+    reader.readAsDataURL(file);
+  }).then(dataUrl => {
+    stage.style.backgroundImage = `url(${dataUrl})`; // local preview
+    socket.emit('set_background', dataUrl);          // broadcast once fully loaded
+  });
 });
+
 
 // ---------------- Clear ----------------
 clearBtn.addEventListener('click', ()=>{
