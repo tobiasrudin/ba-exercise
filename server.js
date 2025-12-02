@@ -16,41 +16,43 @@ const io = new Server(server, {
 
 app.use(express.static("public")); // serves index.html and assets
 
-// Shared global layout
+// Store the current board state
 let layout = {
-  background: null,
-  items: [] // { id, src, left, top, width, locked }
+  background: null,  // background as data URL
+  items: []          // array of image objects {id, src, left, top, width, locked}
 };
 
-io.on("connection", socket => {
-  socket.emit("initial_state", layout);
+io.on('connection', socket => {
+  // Send full current state to new client
+  socket.emit('initial_state', layout);
 
-  socket.on("add_images", imgs => {
-    imgs.forEach(i => layout.items.push(i));
-    socket.broadcast.emit("images_added", imgs);
+  // Add images
+  socket.on('add_images', imgs => {
+    layout.items.push(...imgs);
+    socket.broadcast.emit('images_added', imgs);
   });
 
-  socket.on("move_image", data => {
-    const item = layout.items.find(i => i.id === data.id);
-    if (item) {
-      item.left = data.left;
-      item.top = data.top;
+  // Move image
+  socket.on('move_image', data => {
+    const img = layout.items.find(i => i.id === data.id);
+    if(img){
+      img.left = data.left;
+      img.top = data.top;
     }
-    socket.broadcast.emit("image_moved", data);
+    socket.broadcast.emit('image_moved', data);
   });
 
-  socket.on("delete_image", id => {
-    layout.items = layout.items.filter(i => i.id !== id);
-    socket.broadcast.emit("image_deleted", id);
+  // Set background
+  socket.on('set_background', dataUrl => {
+    layout.background = dataUrl;      // store once
+    socket.broadcast.emit('background_set', dataUrl);
   });
 
-  socket.on('set_background', dataUrl =>{
-    stage.style.backgroundImage = `url(${dataUrl})`;
-  });
-
-  socket.on("clear_all", () => {
+  // Clear all
+  socket.on('clear_all', () => {
     layout.items = [];
-    io.emit("all_cleared");
+    layout.background = null;
+    socket.broadcast.emit('all_cleared');
   });
 });
 
