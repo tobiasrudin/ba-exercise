@@ -1,3 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shared Drag Board</title>
+  <script src="https://ba-exercise.onrender.com/socket.io/socket.io.js"></script>
+  <style>
+    html,body{height:100%;margin:0;}
+    body{background:#0b1220;color:white;font-family:Inter, sans-serif;}
+    .stage{position:relative;width:100vw;height:100vh;overflow:hidden;background-size:cover;background-position:center;}
+    .toolbar{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(0,0,0,0.3);padding:8px;border-radius:8px;display:flex;gap:8px;}
+    .btn{cursor:pointer;padding:6px 10px;background:#334155;border-radius:6px;}
+    input[type=file]{display:none}
+    .draggable{position:absolute;cursor:grab;border-radius:6px;max-width:300px;user-select:none;}
+    .draggable:active{cursor:grabbing}
+    .selected{outline:3px solid #fff3}
+  </style>
+</head>
 <body data-socket-url="https://ba-exercise.onrender.com">
 <div class="stage" id="stage"></div>
 <div class="toolbar">
@@ -5,8 +24,6 @@
   <label class="btn">Background<input id="bgInput" type="file" accept="image/*"></label>
   <div class="btn" id="clearBtn">Clear</div>
 </div>
-
-<script src="https://ba-exercise.onrender.com/socket.io/socket.io.js"></script>
 <script>
 const socketUrl = document.body.dataset.socketUrl;
 const socket = io(socketUrl);
