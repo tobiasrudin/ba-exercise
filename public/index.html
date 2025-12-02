@@ -18,7 +18,9 @@
   </style>
 </head>
 <body data-socket-url="https://ba-exercise.onrender.com">
-<div class="stage" id="stage"></div>
+<div class="stage" id="stage">
+  <img id="bgImage" src="" alt="" style="width:100%; height:auto; display:block; pointer-events:none;">
+</div>
 <div class="toolbar">
   <label class="btn">Add images<input id="addImageInput" type="file" accept="image/*" multiple></label>
   <label class="btn">Background<input id="bgInput" type="file" accept="image/*"></label>
@@ -31,6 +33,7 @@ const socketUrl = document.body.dataset.socketUrl;
 const socket = io(socketUrl);
 
 const stage = document.getElementById('stage');
+const bgImage = document.getElementById('bgImage');
 const addImageInput = document.getElementById('addImageInput');
 const bgInput = document.getElementById('bgInput');
 const clearBtn = document.getElementById('clearBtn');
@@ -44,6 +47,7 @@ function createImageElement(data){
   img.src = data.src;
   img.dataset.id = data.id;
   img.className = 'draggable';
+  img.style.position = 'absolute';
   img.style.left = data.left + '%';
   img.style.top = data.top + '%';
   img.style.width = data.width + '%';
@@ -72,9 +76,9 @@ function startDrag(e){
   const startX = e.clientX;
   const startY = e.clientY;
 
-  const stageRect = stage.getBoundingClientRect();
-  const origLeft = parseFloat(img.style.left)/100 * stageRect.width;
-  const origTop = parseFloat(img.style.top)/100 * stageRect.height;
+  const rect = bgImage.getBoundingClientRect();
+  const origLeft = parseFloat(img.style.left)/100 * rect.width;
+  const origTop = parseFloat(img.style.top)/100 * rect.height;
 
   img.setPointerCapture(e.pointerId);
 
@@ -83,8 +87,8 @@ function startDrag(e){
     const dy = ev.clientY - startY;
     const left = origLeft + dx;
     const top = origTop + dy;
-    img.style.left = (left / stageRect.width * 100) + '%';
-    img.style.top = (top / stageRect.height * 100) + '%';
+    img.style.left = (left / rect.width * 100) + '%';
+    img.style.top = (top / rect.height * 100) + '%';
   }
 
   function end(ev){
@@ -105,7 +109,7 @@ addImageInput.addEventListener('change', e =>{
   const files = [...e.target.files];
   if(files.length === 0) return;
 
-  const stageRect = stage.getBoundingClientRect();
+  const rect = bgImage.getBoundingClientRect();
   const promises = files.map((file, i) => new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -118,10 +122,10 @@ addImageInput.addEventListener('change', e =>{
       const c = i % cols;
       const leftPx = c * (cellW + gap) + 20;
       const topPx = r * (cellH + gap) + 20;
-      const left = leftPx / stageRect.width * 100;
-      const top = topPx / stageRect.height * 100;
+      const left = leftPx / rect.width * 100;
+      const top = topPx / rect.height * 100;
 
-      const width = 100 / stageRect.width * 100; // initial width as % of stage
+      const width = 100 / rect.width * 100; // initial width as % of background
       const data = { id, src: reader.result, left, top, width, locked: false };
       createImageElement(data);
       resolve(data);
@@ -144,7 +148,7 @@ bgInput.addEventListener('change', e =>{
     reader.onload = () => resolve(reader.result);
     reader.readAsDataURL(file);
   }).then(dataUrl => {
-    stage.style.backgroundImage = `url(${dataUrl})`;
+    bgImage.src = dataUrl;
     socket.emit('set_background', dataUrl);
   });
 });
@@ -152,13 +156,13 @@ bgInput.addEventListener('change', e =>{
 // ---------------- Clear ----------------
 clearBtn.addEventListener('click', ()=>{
   stage.querySelectorAll('.draggable').forEach(i=>i.remove());
-  stage.style.backgroundImage = '';
+  bgImage.src = '';
   socket.emit('clear_all');
 });
 
 // ---------------- Socket handlers ----------------
 socket.on('initial_state', layout =>{
-  if(layout.background) stage.style.backgroundImage = `url(${layout.background})`;
+  if(layout.background) bgImage.src = layout.background;
   layout.items.forEach(data => createImageElement(data));
 });
 
@@ -172,11 +176,11 @@ socket.on('image_moved', data =>{
 });
 
 socket.on('background_set', dataUrl =>{
-  stage.style.backgroundImage = `url(${dataUrl})`;
+  bgImage.src = dataUrl;
 });
 
 socket.on('all_cleared', ()=>{
   stage.querySelectorAll('.draggable').forEach(i=>i.remove());
-  stage.style.backgroundImage = '';
+  bgImage.src = '';
 });
 </script>
