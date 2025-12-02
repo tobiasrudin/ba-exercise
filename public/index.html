@@ -44,9 +44,9 @@ function createImageElement(data){
   img.src = data.src;
   img.dataset.id = data.id;
   img.className = 'draggable';
-  img.style.left = data.left + 'px';
-  img.style.top = data.top + 'px';
-  img.style.width = data.width + 'px';
+  img.style.left = data.left + '%';
+  img.style.top = data.top + '%';
+  img.style.width = data.width + '%';
   img.dataset.locked = data.locked;
   attachHandlers(img);
   stage.appendChild(img);
@@ -71,8 +71,11 @@ function startDrag(e){
   const img = e.target;
   const startX = e.clientX;
   const startY = e.clientY;
-  const origLeft = parseFloat(img.style.left);
-  const origTop = parseFloat(img.style.top);
+
+  const stageRect = stage.getBoundingClientRect();
+  const origLeft = parseFloat(img.style.left)/100 * stageRect.width;
+  const origTop = parseFloat(img.style.top)/100 * stageRect.height;
+
   img.setPointerCapture(e.pointerId);
 
   function move(ev){
@@ -80,12 +83,14 @@ function startDrag(e){
     const dy = ev.clientY - startY;
     const left = origLeft + dx;
     const top = origTop + dy;
-    img.style.left = left + 'px';
-    img.style.top = top + 'px';
-    socket.emit('move_image', { id: img.dataset.id, left, top });
+    img.style.left = (left / stageRect.width * 100) + '%';
+    img.style.top = (top / stageRect.height * 100) + '%';
   }
 
   function end(ev){
+    const relLeft = parseFloat(img.style.left);
+    const relTop = parseFloat(img.style.top);
+    socket.emit('move_image', { id: img.dataset.id, left: relLeft, top: relTop });
     img.releasePointerCapture(ev.pointerId);
     img.removeEventListener('pointermove', move);
     img.removeEventListener('pointerup', end);
@@ -95,13 +100,12 @@ function startDrag(e){
   img.addEventListener('pointerup', end);
 }
 
-// ---------------- Add images (robust) ----------------
+// ---------------- Add images ----------------
 addImageInput.addEventListener('change', e =>{
   const files = [...e.target.files];
   if(files.length === 0) return;
 
-  console.log('Files selected:', files.map(f => f.name));
-
+  const stageRect = stage.getBoundingClientRect();
   const promises = files.map((file, i) => new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -112,19 +116,20 @@ addImageInput.addEventListener('change', e =>{
       const cellH = 100;
       const r = Math.floor(i / cols);
       const c = i % cols;
-      const left = c * (cellW + gap) + 20;
-      const top = r * (cellH + gap) + 20;
+      const leftPx = c * (cellW + gap) + 20;
+      const topPx = r * (cellH + gap) + 20;
+      const left = leftPx / stageRect.width * 100;
+      const top = topPx / stageRect.height * 100;
 
-      const data = { id, src: reader.result, left, top, width: 100, locked: false };
-      createImageElement(data); // create locally
-      console.log('File loaded:', file.name, 'id:', id, 'length:', reader.result.length);
+      const width = 100 / stageRect.width * 100; // initial width as % of stage
+      const data = { id, src: reader.result, left, top, width, locked: false };
+      createImageElement(data);
       resolve(data);
     };
     reader.readAsDataURL(file);
   }));
 
   Promise.all(promises).then(imgs => {
-    console.log('Emitting images to server:', imgs.map(i => i.id));
     socket.emit('add_images', imgs);
   });
 });
@@ -140,7 +145,6 @@ bgInput.addEventListener('change', e =>{
     reader.readAsDataURL(file);
   }).then(dataUrl => {
     stage.style.backgroundImage = `url(${dataUrl})`;
-    console.log('Emitting background to server, length:', dataUrl.length);
     socket.emit('set_background', dataUrl);
   });
 });
@@ -164,7 +168,7 @@ socket.on('images_added', imgs =>{
 
 socket.on('image_moved', data =>{
   const img = stage.querySelector(`[data-id='${data.id}']`);
-  if(img){ img.style.left = data.left+'px'; img.style.top = data.top+'px'; }
+  if(img){ img.style.left = data.left+'%'; img.style.top = data.top+'%'; }
 });
 
 socket.on('background_set', dataUrl =>{
