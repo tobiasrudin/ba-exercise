@@ -1,0 +1,177 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Shared Drag Board</title>
+  <script src="/socket.io/socket.io.js"></script>
+  <style>
+    html,body{height:100%;margin:0;}
+    body{background:#0b1220;color:white;font-family:Inter, sans-serif;}
+    .stage{position:relative;width:100vw;height:100vh;overflow:hidden;background-size:cover;background-position:center;}
+    .toolbar{position:absolute;top:10px;left:10px;z-index:1000;background:rgba(0,0,0,0.3);padding:8px;border-radius:8px;display:flex;gap:8px;}
+    .btn{cursor:pointer;padding:6px 10px;background:#334155;border-radius:6px;}
+    input[type=file]{display:none}
+    .draggable{position:absolute;cursor:grab;border-radius:6px;max-width:300px;user-select:none;}
+    .draggable:active{cursor:grabbing}
+    .selected{outline:3px solid #fff3}
+  </style>
+</head>
+<body>
+
+<div class="stage" id="stage"></div>
+
+<div class="toolbar">
+  <label class="btn">Add images<input id="addImageInput" type="file" accept="image/*" multiple></label>
+  <label class="btn">Background<input id="bgInput" type="file" accept="image/*"></label>
+  <div class="btn" id="clearBtn">Clear</div>
+</div>
+
+<script>
+const socket = io();
+const stage = document.getElementById('stage');
+const addImageInput = document.getElementById('addImageInput');
+const bgInput = document.getElementById('bgInput');
+const clearBtn = document.getElementById('clearBtn');
+
+let selected = null;
+let zCounter = 10;
+
+function createImageElement(data){
+  const img = document.createElement('img');
+  img.src = data.src;
+  img.dataset.id = data.id;
+  img.className = 'draggable';
+  img.style.left = data.left + 'px';
+  img.style.top = data.top + 'px';
+  img.style.width = data.width + 'px';
+  img.dataset.locked = data.locked;
+  attachHandlers(img);
+  stage.appendChild(img);
+  return img;
+}
+
+function attachHandlers(img){
+  img.addEventListener('pointerdown', startDrag);
+  img.addEventListener('click', e => { e.stopPropagation(); select(img); });
+}
+
+function select(img){
+  if(selected) selected.classList.remove('selected');
+  selected = img;
+  if(img) img.classList.add('selected');
+}
+
+stage.addEventListener('click', ()=> select(null));
+
+function startDrag(e){
+  if(e.button !== 0) return;
+  const img = e.target;
+  const startX = e.clientX;
+  const startY = e.clientY;
+  const origLeft = parseFloat(img.style.left);
+  const origTop = parseFloat(img.style.top);
+  img.setPointerCapture(e.pointerId);
+
+  function move(ev){
+    const dx = ev.clientX - startX;
+    const dy = ev.clientY - startY;
+    const left = origLeft + dx;
+    const top = origTop + dy;
+    img.style.left = left + 'px';
+    img.style.top = top + 'px';
+
+    socket.emit('move_image', {
+      id: img.dataset.id,
+      left, top
+    });
+  }
+
+  function end(ev){
+    img.releasePointerCapture(ev.pointerId);
+    img.removeEventListener('pointermove', move);
+    img.removeEventListener('pointerup', end);
+  }
+
+  img.addEventListener('pointermove', move);
+  img.addEventListener('pointerup', end);
+}
+
+addImageInput.addEventListener('change', e =>{
+  const files = [...e.target.files];
+  if(files.length === 0) return;
+
+  const cols = Math.ceil(Math.sqrt(files.length));
+  const gap = 20;
+  const cellW = 200;
+  const cellH = 200;
+
+  const imgs = [];
+
+  files.forEach((file,i)=>{
+    const reader = new FileReader();
+    reader.onload = ()=>{
+      const id = 'img_' + Math.random().toString(36).slice(2);
+      const r = Math.floor(i / cols);
+      const c = i % cols;
+      const left = c*(cellW+gap)+20;
+      const top = r*(cellH+gap)+20;
+
+      const data = { id, src: reader.result, left, top, width:200, locked:false };
+      imgs.push(data);
+      createImageElement(data);
+
+      if(imgs.length === files.length){
+        socket.emit('add_images', imgs);
+      }
+    };
+    reader.readAsDataURL(file);
+  });
+});
+
+bgInput.addEventListener('change', e =>{
+  const file = e.target.files[0];
+  if(!file) return;
+  const reader = new FileReader();
+  reader.onload = ()=>{
+    stage.style.backgroundImage = `url(${reader.result})`;
+    socket.emit('set_background', reader.result);
+  };
+  reader.readAsDataURL(file);
+});
+
+clearBtn.addEventListener('click', ()=>{
+  stage.querySelectorAll('.draggable').forEach(i=>i.remove());
+  socket.emit('clear_all');
+});
+
+// Receive updates
+socket.on('initial_state', layout =>{
+  if(layout.background) stage.style.backgroundImage = layout.background;
+  layout.items.forEach(data => createImageElement(data));
+});
+
+socket.on('images_added', imgs =>{
+  imgs.forEach(data => createImageElement(data));
+});
+
+socket.on('image_moved', data =>{
+  const img = stage.querySelector(`[data-id='${data.id}']`);
+  if(img){ img.style.left = data.left+'px'; img.style.top = data.top+'px'; }
+});
+
+socket.on('image_deleted', id =>{
+  const img = stage.querySelector(`[data-id='${id}']`);
+  if(img) img.remove();
+});
+
+socket.on('background_set', url =>{
+  stage.style.backgroundImage = `url(${url})`;
+});
+
+socket.on('all_cleared', ()=>{
+  stage.querySelectorAll('.draggable').forEach(i=>i.remove());
+});
+</script>
+</body>
+</html>
