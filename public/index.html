@@ -108,14 +108,14 @@ addImageInput.addEventListener('change', e =>{
       const id = 'img_' + Math.random().toString(36).slice(2);
       const cols = Math.ceil(Math.sqrt(files.length));
       const gap = 20;
-      const cellW = 200;
-      const cellH = 200;
+      const cellW = 100;
+      const cellH = 100;
       const r = Math.floor(i / cols);
       const c = i % cols;
       const left = c * (cellW + gap) + 20;
       const top = r * (cellH + gap) + 20;
 
-      const data = { id, src: reader.result, left, top, width: 200, locked: false };
+      const data = { id, src: reader.result, left, top, width: 100, locked: false };
       createImageElement(data); // create locally
       console.log('File loaded:', file.name, 'id:', id, 'length:', reader.result.length);
       resolve(data);
