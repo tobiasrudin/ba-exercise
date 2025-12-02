@@ -24,6 +24,8 @@
   <label class="btn">Background<input id="bgInput" type="file" accept="image/*"></label>
   <div class="btn" id="clearBtn">Clear</div>
 </div>
+
+<script src="https://ba-exercise.onrender.com/socket.io/socket.io.js"></script>
 <script>
 const socketUrl = document.body.dataset.socketUrl;
 const socket = io(socketUrl);
@@ -38,7 +40,6 @@ let selected = null;
 // ---------------- Utilities ----------------
 function createImageElement(data){
   if(stage.querySelector(`[data-id='${data.id}']`)) return;
-
   const img = document.createElement('img');
   img.src = data.src;
   img.dataset.id = data.id;
@@ -81,7 +82,6 @@ function startDrag(e){
     const top = origTop + dy;
     img.style.left = left + 'px';
     img.style.top = top + 'px';
-
     socket.emit('move_image', { id: img.dataset.id, left, top });
   }
 
@@ -95,12 +95,13 @@ function startDrag(e){
   img.addEventListener('pointerup', end);
 }
 
-// ---------------- Add images ----------------
-addImageInput.addEventListener('change', e => {
+// ---------------- Add images (robust) ----------------
+addImageInput.addEventListener('change', e =>{
   const files = [...e.target.files];
-  if (files.length === 0) return;
+  if(files.length === 0) return;
 
-  // Map each file to a promise that resolves when FileReader finishes
+  console.log('Files selected:', files.map(f => f.name));
+
   const promises = files.map((file, i) => new Promise(resolve => {
     const reader = new FileReader();
     reader.onload = () => {
@@ -115,36 +116,34 @@ addImageInput.addEventListener('change', e => {
       const top = r * (cellH + gap) + 20;
 
       const data = { id, src: reader.result, left, top, width: 200, locked: false };
-
-      createImageElement(data); // create locally for the sender
-
-      resolve(data); // resolve the promise with the image data
+      createImageElement(data); // create locally
+      console.log('File loaded:', file.name, 'id:', id, 'length:', reader.result.length);
+      resolve(data);
     };
     reader.readAsDataURL(file);
   }));
 
-  // Wait until all files are read
   Promise.all(promises).then(imgs => {
-    socket.emit('add_images', imgs); // emit to server once all images are ready
+    console.log('Emitting images to server:', imgs.map(i => i.id));
+    socket.emit('add_images', imgs);
   });
 });
 
-
 // ---------------- Background ----------------
-bgInput.addEventListener('change', e => {
+bgInput.addEventListener('change', e =>{
   const file = e.target.files[0];
   if(!file) return;
 
   new Promise(resolve => {
     const reader = new FileReader();
-    reader.onload = () => resolve(reader.result); // wait for full data
+    reader.onload = () => resolve(reader.result);
     reader.readAsDataURL(file);
   }).then(dataUrl => {
-    stage.style.backgroundImage = `url(${dataUrl})`; // local preview
-    socket.emit('set_background', dataUrl);          // broadcast once fully loaded
+    stage.style.backgroundImage = `url(${dataUrl})`;
+    console.log('Emitting background to server, length:', dataUrl.length);
+    socket.emit('set_background', dataUrl);
   });
 });
-
 
 // ---------------- Clear ----------------
 clearBtn.addEventListener('click', ()=>{
