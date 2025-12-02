@@ -39,6 +39,8 @@ const bgInput = document.getElementById('bgInput');
 const clearBtn = document.getElementById('clearBtn');
 
 let selected = null;
+let bgNaturalWidth = 0;
+let bgNaturalHeight = 0;
 
 // ---------------- Utilities ----------------
 function createImageElement(data){
@@ -48,12 +50,22 @@ function createImageElement(data){
   img.dataset.id = data.id;
   img.className = 'draggable';
   img.style.position = 'absolute';
-  img.style.left = data.left + '%';
-  img.style.top = data.top + '%';
-  img.style.width = data.width + '%';
   img.dataset.locked = data.locked;
+
+  function position(){
+    if(!bgNaturalWidth || !bgNaturalHeight) return;
+    const rect = bgImage.getBoundingClientRect();
+    img.style.left = (data.left * rect.width) + 'px';
+    img.style.top = (data.top * rect.height) + 'px';
+    img.style.width = (data.width * rect.width) + 'px';
+  }
+
   attachHandlers(img);
   stage.appendChild(img);
+
+  window.addEventListener('resize', position);
+  bgImage.addEventListener('load', position);
+  position();
 }
 
 function attachHandlers(img){
@@ -73,28 +85,26 @@ stage.addEventListener('click', ()=> select(null));
 function startDrag(e){
   if(e.button !== 0) return;
   const img = e.target;
-  const startX = e.clientX;
-  const startY = e.clientY;
+  img.setPointerCapture(e.pointerId);
 
   const rect = bgImage.getBoundingClientRect();
-  const origLeft = parseFloat(img.style.left)/100 * rect.width;
-  const origTop = parseFloat(img.style.top)/100 * rect.height;
-
-  img.setPointerCapture(e.pointerId);
+  const origLeft = parseFloat(img.style.left);
+  const origTop = parseFloat(img.style.top);
+  const startX = e.clientX;
+  const startY = e.clientY;
 
   function move(ev){
     const dx = ev.clientX - startX;
     const dy = ev.clientY - startY;
-    const left = origLeft + dx;
-    const top = origTop + dy;
-    img.style.left = (left / rect.width * 100) + '%';
-    img.style.top = (top / rect.height * 100) + '%';
+    img.style.left = (origLeft + dx) + 'px';
+    img.style.top = (origTop + dy) + 'px';
   }
 
   function end(ev){
-    const relLeft = parseFloat(img.style.left);
-    const relTop = parseFloat(img.style.top);
-    socket.emit('move_image', { id: img.dataset.id, left: relLeft, top: relTop });
+    const rect = bgImage.getBoundingClientRect();
+    const leftFrac = parseFloat(img.style.left) / rect.width;
+    const topFrac = parseFloat(img.style.top) / rect.height;
+    socket.emit('move_image', { id: img.dataset.id, left: leftFrac, top: topFrac });
     img.releasePointerCapture(ev.pointerId);
     img.removeEventListener('pointermove', move);
     img.removeEventListener('pointerup', end);
@@ -107,7 +117,7 @@ function startDrag(e){
 // ---------------- Add images ----------------
 addImageInput.addEventListener('change', e =>{
   const files = [...e.target.files];
-  if(files.length === 0) return;
+  if(files.length === 0 || !bgNaturalWidth || !bgNaturalHeight) return;
 
   const rect = bgImage.getBoundingClientRect();
   const promises = files.map((file, i) => new Promise(resolve => {
@@ -122,10 +132,9 @@ addImageInput.addEventListener('change', e =>{
       const c = i % cols;
       const leftPx = c * (cellW + gap) + 20;
       const topPx = r * (cellH + gap) + 20;
-      const left = leftPx / rect.width * 100;
-      const top = topPx / rect.height * 100;
-
-      const width = 100 / rect.width * 100; // initial width as % of background
+      const left = leftPx / rect.width;
+      const top = topPx / rect.height;
+      const width = 100 / rect.width; // store width as fraction
       const data = { id, src: reader.result, left, top, width, locked: false };
       createImageElement(data);
       resolve(data);
@@ -149,8 +158,14 @@ bgInput.addEventListener('change', e =>{
     reader.readAsDataURL(file);
   }).then(dataUrl => {
     bgImage.src = dataUrl;
-    socket.emit('set_background', dataUrl);
   });
+});
+
+// Update natural size when image loads
+bgImage.addEventListener('load', ()=>{
+  bgNaturalWidth = bgImage.naturalWidth;
+  bgNaturalHeight = bgImage.naturalHeight;
+  socket.emit('set_background', bgImage.src);
 });
 
 // ---------------- Clear ----------------
@@ -172,7 +187,11 @@ socket.on('images_added', imgs =>{
 
 socket.on('image_moved', data =>{
   const img = stage.querySelector(`[data-id='${data.id}']`);
-  if(img){ img.style.left = data.left+'%'; img.style.top = data.top+'%'; }
+  if(img && bgNaturalWidth && bgNaturalHeight){
+    const rect = bgImage.getBoundingClientRect();
+    img.style.left = (data.left * rect.width) + 'px';
+    img.style.top = (data.top * rect.height) + 'px';
+  }
 });
 
 socket.on('background_set', dataUrl =>{
