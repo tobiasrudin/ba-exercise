@@ -44,9 +44,8 @@ io.on("connection", socket => {
     socket.broadcast.emit("image_deleted", id);
   });
 
-  socket.on("set_background", url => {
-    layout.background = url;
-    socket.broadcast.emit("background_set", url);
+  socket.on('set_background', dataUrl =>{
+    stage.style.backgroundImage = `url(${dataUrl})`;
   });
 
   socket.on("clear_all", () => {

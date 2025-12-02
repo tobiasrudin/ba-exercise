@@ -17,7 +17,7 @@
     .selected{outline:3px solid #fff3}
   </style>
 </head>
-<body>
+<body data-socket-url="https://ba-exercise.onrender.com">
 
 <div class="stage" id="stage"></div>
 
@@ -28,7 +28,9 @@
 </div>
 
 <script>
-const socket = io("https://ba-exercise.onrender.com");
+const socketUrl = document.body.dataset.socketUrl;
+const socket = io(socketUrl);
+
 const stage = document.getElementById('stage');
 const addImageInput = document.getElementById('addImageInput');
 const bgInput = document.getElementById('bgInput');
@@ -37,7 +39,10 @@ const clearBtn = document.getElementById('clearBtn');
 let selected = null;
 let zCounter = 10;
 
+// ---------------- Image logic ----------------
 function createImageElement(data){
+  if(stage.querySelector(`[data-id='${data.id}']`)) return;
+
   const img = document.createElement('img');
   img.src = data.src;
   img.dataset.id = data.id;
@@ -48,7 +53,6 @@ function createImageElement(data){
   img.dataset.locked = data.locked;
   attachHandlers(img);
   stage.appendChild(img);
-  return img;
 }
 
 function attachHandlers(img){
@@ -81,10 +85,7 @@ function startDrag(e){
     img.style.left = left + 'px';
     img.style.top = top + 'px';
 
-    socket.emit('move_image', {
-      id: img.dataset.id,
-      left, top
-    });
+    socket.emit('move_image', { id: img.dataset.id, left, top });
   }
 
   function end(ev){
@@ -97,6 +98,7 @@ function startDrag(e){
   img.addEventListener('pointerup', end);
 }
 
+// ---------------- Add images ----------------
 addImageInput.addEventListener('change', e =>{
   const files = [...e.target.files];
   if(files.length === 0) return;
@@ -129,46 +131,51 @@ addImageInput.addEventListener('change', e =>{
   });
 });
 
+// ---------------- Background ----------------
 bgInput.addEventListener('change', e =>{
   const file = e.target.files[0];
   if(!file) return;
+
   const reader = new FileReader();
   reader.onload = ()=>{
-    stage.style.backgroundImage = `url(${reader.result})`;
-    socket.emit('set_background', reader.result);
+    const dataUrl = reader.result; // this is the full base64 string
+    stage.style.backgroundImage = `url(${dataUrl})`;
+    socket.emit('set_background', dataUrl); // broadcast to others
   };
   reader.readAsDataURL(file);
 });
 
+// ---------------- Clear ----------------
 clearBtn.addEventListener('click', ()=>{
   stage.querySelectorAll('.draggable').forEach(i=>i.remove());
   socket.emit('clear_all');
 });
 
-// Receive updates
+// ---------------- Socket handlers ----------------
+
+// Initial state
 socket.on('initial_state', layout =>{
   if(layout.background) stage.style.backgroundImage = layout.background;
   layout.items.forEach(data => createImageElement(data));
 });
 
+// Images added
 socket.on('images_added', imgs =>{
   imgs.forEach(data => createImageElement(data));
 });
 
+// Image moved
 socket.on('image_moved', data =>{
   const img = stage.querySelector(`[data-id='${data.id}']`);
   if(img){ img.style.left = data.left+'px'; img.style.top = data.top+'px'; }
 });
 
-socket.on('image_deleted', id =>{
-  const img = stage.querySelector(`[data-id='${id}']`);
-  if(img) img.remove();
-});
-
+// Background set
 socket.on('background_set', url =>{
   stage.style.backgroundImage = `url(${url})`;
 });
 
+// Clear all
 socket.on('all_cleared', ()=>{
   stage.querySelectorAll('.draggable').forEach(i=>i.remove());
 });
