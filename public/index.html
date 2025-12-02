@@ -49,22 +49,25 @@ function createImageElement(data){
   img.src = data.src;
   img.dataset.id = data.id;
   img.className = 'draggable';
-  img.style.position = 'absolute';
   img.dataset.locked = data.locked;
-
-  function position(){
-    if(!bgNaturalWidth || !bgNaturalHeight) return;
-    const rect = bgImage.getBoundingClientRect();
-    img.style.left = (data.left * rect.width) + 'px';
-    img.style.top = (data.top * rect.height) + 'px';
-    img.style.width = (data.width * rect.width) + 'px';
-  }
+  img.dataset.left = data.left;
+  img.dataset.top = data.top;
+  img.dataset.width = data.width;
 
   attachHandlers(img);
   stage.appendChild(img);
 
-  window.addEventListener('resize', position);
+  function position(){
+    if(!bgNaturalWidth || !bgNaturalHeight) return;
+    const rect = bgImage.getBoundingClientRect();
+    img.style.left = (parseFloat(img.dataset.left) * rect.width) + 'px';
+    img.style.top = (parseFloat(img.dataset.top) * rect.height) + 'px';
+    img.style.width = (parseFloat(img.dataset.width) * rect.width) + 'px';
+  }
+
+  // Call once when bg loads or window resizes
   bgImage.addEventListener('load', position);
+  window.addEventListener('resize', position);
   position();
 }
 
@@ -104,6 +107,11 @@ function startDrag(e){
     const rect = bgImage.getBoundingClientRect();
     const leftFrac = parseFloat(img.style.left) / rect.width;
     const topFrac = parseFloat(img.style.top) / rect.height;
+
+    // Update local dataset
+    img.dataset.left = leftFrac;
+    img.dataset.top = topFrac;
+
     socket.emit('move_image', { id: img.dataset.id, left: leftFrac, top: topFrac });
     img.releasePointerCapture(ev.pointerId);
     img.removeEventListener('pointermove', move);
@@ -134,7 +142,7 @@ addImageInput.addEventListener('change', e =>{
       const topPx = r * (cellH + gap) + 20;
       const left = leftPx / rect.width;
       const top = topPx / rect.height;
-      const width = 100 / rect.width; // store width as fraction
+      const width = 100 / rect.width;
       const data = { id, src: reader.result, left, top, width, locked: false };
       createImageElement(data);
       resolve(data);
@@ -152,20 +160,18 @@ bgInput.addEventListener('change', e =>{
   const file = e.target.files[0];
   if(!file) return;
 
-  new Promise(resolve => {
-    const reader = new FileReader();
-    reader.onload = () => resolve(reader.result);
-    reader.readAsDataURL(file);
-  }).then(dataUrl => {
-    bgImage.src = dataUrl;
-  });
+  const reader = new FileReader();
+  reader.onload = () => {
+    bgImage.src = reader.result;
+    socket.emit('set_background', reader.result);
+  };
+  reader.readAsDataURL(file);
 });
 
-// Update natural size when image loads
+// Update natural size when background loads
 bgImage.addEventListener('load', ()=>{
   bgNaturalWidth = bgImage.naturalWidth;
   bgNaturalHeight = bgImage.naturalHeight;
-  socket.emit('set_background', bgImage.src);
 });
 
 // ---------------- Clear ----------------
@@ -189,6 +195,8 @@ socket.on('image_moved', data =>{
   const img = stage.querySelector(`[data-id='${data.id}']`);
   if(img && bgNaturalWidth && bgNaturalHeight){
     const rect = bgImage.getBoundingClientRect();
+    img.dataset.left = data.left;
+    img.dataset.top = data.top;
     img.style.left = (data.left * rect.width) + 'px';
     img.style.top = (data.top * rect.height) + 'px';
   }
